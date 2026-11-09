@@ -1,4 +1,8 @@
+
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 
 void main() {
   runApp(const DingApp());
@@ -34,6 +38,89 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int selectedIndex = 0;
+  bool isLocating = false;
+
+  final MapController mapController = MapController();
+
+  static const LatLng initialLocation = LatLng(35.6892, 51.3890);
+
+  LatLng? currentLocation;
+
+  Future<void> goToMyLocation() async {
+    if (isLocating) return;
+
+    setState(() {
+      isLocating = true;
+    });
+
+    try {
+      bool serviceEnabled =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled) {
+        throw Exception('لطفاً GPS گوشی را روشن کن.');
+      }
+
+      LocationPermission permission =
+          await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied) {
+        throw Exception('اجازه دسترسی به موقعیت داده نشد.');
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception(
+          'دسترسی GPS از تنظیمات برنامه فعال شود.',
+        );
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+
+      final location = LatLng(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        currentLocation = location;
+      });
+
+      mapController.move(location, 16);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst('Exception: ', ''),
+            textAlign: TextAlign.right,
+          ),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLocating = false;
+        });
+      }
+    }
+  }
+
+  void resetMap() {
+    mapController.move(initialLocation, 12);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,11 +129,34 @@ class _HomePageState extends State<HomePage> {
         child: Stack(
           children: [
             Positioned.fill(
-              child: Container(
-                color: const Color(0xFF192A32),
-                child: CustomPaint(
-                  painter: MapBackgroundPainter(),
+              child: FlutterMap(
+                mapController: mapController,
+                options: const MapOptions(
+                  initialCenter: initialLocation,
+                  initialZoom: 12,
+                  minZoom: 3,
+                  maxZoom: 18,
                 ),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.ding',
+                  ),
+
+                  if (currentLocation != null)
+                    CircleLayer(
+                      circles: [
+                        CircleMarker(
+                          point: currentLocation!,
+                          radius: 10,
+                          color: const Color(0xFF00C9A7),
+                          borderColor: Colors.white,
+                          borderStrokeWidth: 3,
+                        ),
+                      ],
+                    ),
+                ],
               ),
             ),
 
@@ -89,8 +199,25 @@ class _HomePageState extends State<HomePage> {
               child: FloatingActionButton(
                 backgroundColor: const Color(0xFF00C9A7),
                 foregroundColor: Colors.black,
-                onPressed: () {},
-                child: const Icon(Icons.my_location),
+                onPressed: isLocating ? null : goToMyLocation,
+                child: isLocating
+                    ? const CircularProgressIndicator(
+                        color: Colors.black,
+                      )
+                    : const Icon(Icons.my_location),
+              ),
+            ),
+
+            const Positioned(
+              bottom: 85,
+              right: 10,
+              child: Text(
+                '© OpenStreetMap contributors',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  backgroundColor: Color(0x99000000),
+                ),
               ),
             ),
 
@@ -155,41 +282,4 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-}
-
-class MapBackgroundPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final roadPaint = Paint()
-      ..color = const Color(0xFF30434B)
-      ..strokeWidth = 13
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final thinRoadPaint = Paint()
-      ..color = const Color(0xFF263941)
-      ..strokeWidth = 7
-      ..style = PaintingStyle.stroke;
-
-    final path1 = Path()
-      ..moveTo(0, size.height * 0.35)
-      ..lineTo(size.width * 0.4, size.height * 0.48)
-      ..lineTo(size.width, size.height * 0.28);
-
-    final path2 = Path()
-      ..moveTo(size.width * 0.2, 0)
-      ..lineTo(size.width * 0.45, size.height * 0.5)
-      ..lineTo(size.width * 0.25, size.height);
-
-    final path3 = Path()
-      ..moveTo(0, size.height * 0.72)
-      ..lineTo(size.width, size.height * 0.65);
-
-    canvas.drawPath(path1, roadPaint);
-    canvas.drawPath(path2, roadPaint);
-    canvas.drawPath(path3, thinRoadPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -23,6 +23,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_map: ^8.3.2
+  geolocator: ^14.1.2
+  latlong2: ^0.10.1
   mapbox_maps_flutter: ^2.19.0
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
